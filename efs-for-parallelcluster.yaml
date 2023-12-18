@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Reginal EFS
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: EFS Settings
+        Parameters:
+          - VPCID
+          - IsolatedSubnet1
+          - IsolatedSubnet2
+          - IsolatedSubnet3
+
+Mappings:
+  Constant:
+    EnvName:
+      ProjectName: hpc
+      Environment: dev
+
+Parameters:
+  VPCID:
+    Type: AWS::EC2::VPC::Id
+  IsolatedSubnet1:
+    Description: "EFS Subnet 1"
+    Type: AWS::EC2::Subnet::Id
+  IsolatedSubnet2:
+    Description: "EFS Subnet 2"
+    Type: AWS::EC2::Subnet::Id
+  IsolatedSubnet3:
+    Description: "EFS Subnet 3"
+    Type: AWS::EC2::Subnet::Id
+
+Resources:
+  # EFS
+  EFS1:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PerformanceMode: generalPurpose
+      Encrypted: true
+      ThroughputMode: elastic
+      BackupPolicy:
+        Status: ENABLED
+      LifecyclePolicies:
+        - TransitionToIA: AFTER_14_DAYS
+        - TransitionToArchive: AFTER_90_DAYS
+        - TransitionToPrimaryStorageClass: AFTER_1_ACCESS
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub
+            - ${ProjectName}-${Environment}-efs-for-parallelcluster
+            - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+              Environment: !FindInMap [ Constant, EnvName, Environment]
+  MountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFS1
+      SubnetId:
+        Ref: IsolatedSubnet1
+      SecurityGroups:
+        - Ref: SecurityGroup1
+  MountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFS1
+      SubnetId:
+        Ref: IsolatedSubnet2
+      SecurityGroups:
+        - Ref: SecurityGroup1
+  MountTarget3:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: EFS1
+      SubnetId:
+        Ref: IsolatedSubnet3
+      SecurityGroups:
+        - Ref: SecurityGroup1
+
+  SecurityGroup1:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub
+        - ${ProjectName}-${Environment}-efs-sg
+        - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+          Environment: !FindInMap [ Constant, EnvName, Environment]
+      GroupDescription: EFS Security Group
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: "10.0.0.0/16"
+          Description: "Allowed HPC VPC"
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: Name
+          Value: !Sub
+              - ${ProjectName}-${Environment}-efs-sg
+              - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+                Environment: !FindInMap [ Constant, EnvName, Environment]
+        - Key: Environment
+          Value: !FindInMap [ Constant, EnvName, Environment]
+Outputs:
+  ExportSG1:
+    Value: !Ref EFS1
+    Export:
+      Name: !Sub ${AWS::StackName}-EFS1

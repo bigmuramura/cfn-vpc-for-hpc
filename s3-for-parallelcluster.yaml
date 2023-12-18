@@ -1,0 +1,89 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: S3 Buckets for ParallelCluster
+
+Mappings:
+  Constant:
+    EnvName:
+      ProjectName: hpc
+      Environment: dev
+
+Resources:
+  # ------------------------------------------------------------#
+  # S3 Buckets for ParallelCluster
+  # ------------------------------------------------------------#
+  S3Bucket1:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub
+        - ${ProjectName}-${Environment}-custom-boostrap-files-for-parallelcluster
+        - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+          Environment: !FindInMap [ Constant, EnvName, Environment]
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: "BucketOwnerEnforced"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+            BucketKeyEnabled: false
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUpload
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+            Status: "Enabled"
+          - Id: EnabledInteligentTiering
+            Transitions:
+              - StorageClass: INTELLIGENT_TIERING
+                TransitionInDays: 14
+            Status: "Enabled"
+
+  S3Bucket2:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub
+        - ${ProjectName}-${Environment}-mountpoint-bucket1-for-parallelcluster
+        - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+          Environment: !FindInMap [ Constant, EnvName, Environment]
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: "BucketOwnerEnforced"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+            BucketKeyEnabled: false
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUpload
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+            Status: "Enabled"
+          - Id: EnabledInteligentTiering
+            Transitions:
+              - StorageClass: INTELLIGENT_TIERING
+                TransitionInDays: 14
+              - StorageClass: GLACIER
+                TransitionInDays: 90
+              - StorageClass: DEEP_ARCHIVE
+                TransitionInDays: 180
+            Status: "Enabled"

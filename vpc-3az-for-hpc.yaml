@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Network 3 layers and VPC Endpoint with switching single Nat Gateway
+Description: 3AZ Network 3 layers and VPC Endpoint with switching single Nat Gateway
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -27,10 +27,13 @@ Mappings:
       VPCCidr: 10.0.0.0/16
       PublicSubnetCidr1: 10.0.1.0/24
       PublicSubnetCidr2: 10.0.2.0/24
+      PublicSubnetCidr3: 10.0.3.0/24
       PrivateSubnetCidr1: 10.0.17.0/24
       PrivateSubnetCidr2: 10.0.18.0/24
+      PrivateSubnetCidr3: 10.0.19.0/24
       IsolatedSubnetCidr1: 10.0.33.0/24
       IsolatedSubnetCidr2: 10.0.34.0/24
+      IsolatedSubnetCidr3: 10.0.35.0/24
 
 Conditions:
   EnableNatGateway: !Equals [true, !Ref EnableNatGateway]
@@ -214,6 +217,28 @@ Resources:
     Properties:
       SubnetId: !Ref PublicSubnet2
       RouteTableId: !Ref PublicRouteTable1
+  # Public 3
+  PublicSubnet3:
+    Type: AWS::EC2::Subnet
+    DependsOn: AttachGateway
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !FindInMap [ Network, Cidrs, PublicSubnetCidr3]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${ProjectName}-${Environment}-public-subnet3
+            - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+              Environment: !FindInMap [ Constant, EnvName, Environment]
+        - Key: Environment
+          Value: !FindInMap [ Constant, EnvName, Environment]
+  PublicSubnetRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet3
+      RouteTableId: !Ref PublicRouteTable1
 
   # ----------------------------------------------------------------------------------------
   # Private Subnet
@@ -253,6 +278,24 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable1
+  # Private 3
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !FindInMap [ Network, Cidrs, PrivateSubnetCidr3]
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${ProjectName}-${Environment}-private-subnet3
+            - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+              Environment: !FindInMap [ Constant, EnvName, Environment]
+  PrivateSubnetRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
       RouteTableId: !Ref PrivateRouteTable1
 
   # ----------------------------------------------------------------------------------------
@@ -297,6 +340,26 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref IsolatedSubnet2
+      RouteTableId: !Ref IsolatedRouteTable1
+  # Isolated 3
+  IsolatedSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [2, !GetAZs ""]
+      CidrBlock: !FindInMap [ Network, Cidrs, IsolatedSubnetCidr3]
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${ProjectName}-${Environment}-isolated-subnet3
+            - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+              Environment: !FindInMap [ Constant, EnvName, Environment]
+        - Key: Environment
+          Value: !FindInMap [ Constant, EnvName, Environment]
+  IsolatedSubnetRouteTableAssociation3:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref IsolatedSubnet3
       RouteTableId: !Ref IsolatedRouteTable1
 
   # ----------------------------------------------------------------------------------------
@@ -401,6 +464,11 @@ Resources:
     Properties:
       SubnetId: !Ref PublicSubnet2
       NetworkAclId: !Ref PublicNetworkACL1
+  PublicNetworkACLAssocation3:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet3
+      NetworkAclId: !Ref PublicNetworkACL1
   PrivateNetworkACLAssocation1:
     Type: AWS::EC2::SubnetNetworkAclAssociation
     Properties:
@@ -411,6 +479,11 @@ Resources:
     Properties:
       SubnetId: !Ref PrivateSubnet2
       NetworkAclId: !Ref PrivateNetworkACL1
+  PrivateNetworkACLAssocation3:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet3
+      NetworkAclId: !Ref PrivateNetworkACL1
   IsolatedNetworkACLAssocation1:
     Type: AWS::EC2::SubnetNetworkAclAssociation
     Properties:
@@ -420,6 +493,11 @@ Resources:
     Type: AWS::EC2::SubnetNetworkAclAssociation
     Properties:
       SubnetId: !Ref IsolatedSubnet2
+      NetworkAclId: !Ref IsolatedNetworkACL1
+  IsolatedNetworkACLAssocation3:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref IsolatedSubnet3
       NetworkAclId: !Ref IsolatedNetworkACL1
 
   # ----------------------------------------------------------------------------------------
@@ -436,6 +514,76 @@ Resources:
       ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
       VpcEndpointType: Gateway
       VpcId: !Ref VPC
+  # S3 Express Gateway Type
+  GatewayS3ExpressEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref PublicRouteTable1
+        - !Ref PrivateRouteTable1
+        - !Ref IsolatedRouteTable1
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3express"
+      VpcEndpointType: Gateway
+      VpcId: !Ref VPC
+
+  # ------------------------------------------------------------#
+  # S3 Bucket for VPC Flow Logs
+  # ------------------------------------------------------------#
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub
+        - ${ProjectName}-${Environment}-vpc-flowlogs-${AWS::AccountId}
+        - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+          Environment: !FindInMap [ Constant, EnvName, Environment]
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: "BucketOwnerEnforced"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: "AES256"
+            BucketKeyEnabled: false
+      LifecycleConfiguration:
+        Rules:
+          - Id: AbortIncompleteMultipartUpload
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+            Status: "Enabled"
+          - Id: CurrentVersionExpiration
+            ExpirationInDays: 365
+            Status: "Enabled"
+          - Id: NoncurrentVersionExpiration
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+            Status: "Enabled"
+
+  # ------------------------------------------------------------#
+  # VPC Flow Logs
+  # ------------------------------------------------------------#
+  VPCFlowLogs:
+    Type: "AWS::EC2::FlowLog"
+    Properties:
+      LogDestinationType: s3
+      LogDestination: !GetAtt S3Bucket.Arn
+      ResourceType: "VPC"
+      ResourceId: !Ref VPC
+      TrafficType: ALL
+      DestinationOptions:
+        {
+          "FileFormat": "plain-text",
+          "HiveCompatiblePartitions": false,
+          "PerHourPartition": true,
+        }
 
 # ----------------------------------------------------------------------------------------
 # Exports
@@ -453,6 +601,14 @@ Outputs:
     Value: !Ref PublicSubnet2
     Export:
       Name: !Sub ${AWS::StackName}-PublicSubnet2
+  ExportPublicSubnet3:
+    Value: !Ref PublicSubnet3
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnet3
+  ExportPublicRoutetable1:
+    Value: !Ref PublicRouteTable1
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicRouteTable1
   ExportPrivateSubnet1:
     Value: !Ref PrivateSubnet1
     Export:
@@ -461,10 +617,14 @@ Outputs:
     Value: !Ref PrivateSubnet2
     Export:
       Name: !Sub ${AWS::StackName}-PrivateSubnet2
+  ExportPrivateSubnet3:
+    Value: !Ref PrivateSubnet3
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnet3
   ExportPrivateRoutetable1:
     Value: !Ref PrivateRouteTable1
     Export:
-      Name: !Sub ${AWS::StackName}-PrivateRoutetable1
+      Name: !Sub ${AWS::StackName}-PrivateRouteTable1
   ExportIsolatedSubnet1:
     Value: !Ref IsolatedSubnet1
     Export:
@@ -473,7 +633,11 @@ Outputs:
     Value: !Ref IsolatedSubnet2
     Export:
       Name: !Sub ${AWS::StackName}-IsolatedSubnet2
-  ExportIsolatedetable1:
+  ExportIsolatedSubnet3:
+    Value: !Ref IsolatedSubnet2
+    Export:
+      Name: !Sub ${AWS::StackName}-IsolatedSubnet3
+  ExportIsolatedRoutetable1:
     Value: !Ref IsolatedRouteTable1
     Export:
-      Name: !Sub ${AWS::StackName}-Isolatedetable1
+      Name: !Sub ${AWS::StackName}-IsolatedRouteTable1
