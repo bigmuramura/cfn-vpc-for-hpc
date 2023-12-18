@@ -1,0 +1,150 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Aurora Serverless v1 MySQL
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: VPC Settings
+        Parameters:
+          - VPCID
+          - IsolatedSubnet1
+          - IsolatedSubnet2
+          - IsolatedSubnet3
+
+Parameters:
+  VPCID:
+    Type: AWS::EC2::VPC::Id
+  IsolatedSubnet1:
+    Description: "EFS Subnet 1"
+    Type: AWS::EC2::Subnet::Id
+  IsolatedSubnet2:
+    Description: "EFS Subnet 2"
+    Type: AWS::EC2::Subnet::Id
+  IsolatedSubnet3:
+    Description: "EFS Subnet 3"
+    Type: AWS::EC2::Subnet::Id
+  DBClusterIdentifier:
+    Description: DBClusterIdentifier
+    Type: String
+    Default: slurmdb
+    AllowedPattern: ^[a-zA-Z0-9]*$
+    MinLength: 1
+    MaxLength: 60
+  DBMasterUsername:
+    Description: DBMasterUsername
+    Type: String
+    Default: admin
+  DBMasterUserPassword:
+    Description: DBMasterUserPassword
+    Type: String
+    Default: password
+    NoEcho: true
+
+Mappings:
+  Constant:
+    EnvName:
+      ProjectName: hpc
+      Environment: dev
+
+Resources:
+  # --------------------------------------------------------
+  # DB Subnet Group
+  # --------------------------------------------------------
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Database subnets for SlurmDB
+      SubnetIds:
+        - !Ref "IsolatedSubnet1"
+        - !Ref "IsolatedSubnet2"
+        - !Ref "IsolatedSubnet3"
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${ProjectName}-${Environment}-db-subnet-group
+            - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+              Environment: !FindInMap [ Constant, EnvName, Environment]
+        - Key: Environment
+          Value: !FindInMap [ Constant, EnvName, Environment]
+
+  # --------------------------------------------------------
+  # DB Cluster Parameter Group
+  # --------------------------------------------------------
+  DBClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: Aurora Serverless v1 Cluster Parameter Group
+      Family: aurora-mysql5.7
+      Parameters:
+        time_zone: UTC
+      Tags:
+        - Key: Name
+          Value: !Sub
+            - ${ProjectName}-${Environment}-db-cluster-param-group
+            - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+              Environment: !FindInMap [ Constant, EnvName, Environment]
+        - Key: Environment
+          Value: !FindInMap [ Constant, EnvName, Environment]
+
+  # --------------------------------------------------------
+  # Aurora Serverless v1 Cluster
+  # --------------------------------------------------------
+  DBCluster:
+    Type: AWS::RDS::DBCluster
+    # DeletionPolicy: Retain
+    # UpdateReplacePolicy: Retain
+    Properties:
+      BackupRetentionPeriod: 7
+      DBClusterIdentifier: !Ref "DBClusterIdentifier"
+      DBClusterParameterGroupName: !Ref "DBClusterParameterGroup"
+      DBSubnetGroupName: !Ref "DBSubnetGroup"
+      DeletionProtection: false
+      Engine: aurora-mysql
+      EngineMode: serverless
+      EngineVersion: "5.7.mysql_aurora.2.11.4"
+      MasterUsername: !Ref "DBMasterUsername"
+      MasterUserPassword: !Ref "DBMasterUserPassword"
+      Port: 3306
+      PreferredBackupWindow: 18:00-19:00
+      PreferredMaintenanceWindow: Sat:16:00-Sat:17:00
+      ScalingConfiguration:
+        MinCapacity: 1
+        AutoPause: true
+        MaxCapacity: 2
+        SecondsUntilAutoPause: 300
+      StorageEncrypted: true
+      Tags:
+        - Key: Environment
+          Value: !FindInMap [ Constant, EnvName, Environment]
+      VpcSecurityGroupIds:
+        - !Ref "SecurityGroup1"
+
+  # --------------------------------------------------------
+  # Security Group
+  # --------------------------------------------------------
+  SecurityGroup1:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPCID
+      GroupDescription: Allow MySQL (TCP3306)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: "10.0.0.0/16"
+          Description: "Allowed HPC VPC"
+      Tags:
+        - Key: Name
+          Value: !Sub
+              - ${ProjectName}-${Environment}-slumdb-sg
+              - ProjectName: !FindInMap [ Constant, EnvName, ProjectName]
+                Environment: !FindInMap [ Constant, EnvName, Environment]
+        - Key: Environment
+          Value: !FindInMap [ Constant, EnvName, Environment]
+
+Outputs:
+  RdsSecurityGroup:
+    Value: !Ref "SecurityGroup1"
+  DBClusterEndpoint:
+    Value: !GetAtt "DBCluster.Endpoint.Address"
